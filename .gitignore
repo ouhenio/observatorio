@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+/data/
+*.parquet
+*.npy
+.ruff_cache/
+docs/screenshots/
+env.local.sh
+node_modules/
