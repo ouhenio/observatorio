@@ -1,0 +1,19 @@
+name: ci
+on:
+  push:
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      # CPU-only: skip the GPU group (vLLM); model calls are mocked in the tests.
+      - run: uv sync --no-default-groups --group dev --group cluster --group serve
+      - run: uv run ruff check observatorio tests scripts
+      - run: uv run ruff format --check observatorio tests scripts
+      - run: uv run python -m unittest discover -s tests -v
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node --test tests/viewer.test.cjs

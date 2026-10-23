@@ -1,0 +1,1000 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Observatorio</title>
+<script src="https://unpkg.com/deck.gl@9.0.0/dist.min.js"></script>
+<style>
+  /* ---------- tokens (dark is the primary look; light via data-theme) ---------- */
+  :root, :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page:#121211; --panel:#1a1a19; --panel-2:#232321; --panel-3:#2c2c2a;
+    --edge:rgba(255,255,255,.09); --edge-2:rgba(255,255,255,.16);
+    --ink:#ececea; --ink-2:#c3c2b7; --muted:#8f8d86;
+    --map-bg:#0e0e0d; --accent:#e8a23a; --accent-soft:rgba(232,162,58,.16); --accent-ink:#f3c27a;
+    --pill-on:#8c5a1e; --pill-on-ink:#fff4e3;
+    --bar:#3987e5; --bar-track:rgba(255,255,255,.06); --tick:#ececea;
+    --chip:#2a2a28; --chip-ink:#d6d5ce;
+    --label-ink:#ffffff; --label-halo:rgba(0,0,0,.85);
+    --tip:#0b0b0aee; --mark:rgba(232,162,58,.35);
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --page:#f3f2ee; --panel:#fcfcfb; --panel-2:#f1f0ec; --panel-3:#e7e6e0;
+    --edge:rgba(11,11,11,.10); --edge-2:rgba(11,11,11,.18);
+    --ink:#0b0b0b; --ink-2:#52514e; --muted:#6e6c66;
+    --map-bg:#fcfcfb; --accent:#b86e00; --accent-soft:rgba(184,110,0,.12); --accent-ink:#8a5200;
+    --pill-on:#b86e00; --pill-on-ink:#ffffff;
+    --bar:#2a78d6; --bar-track:rgba(11,11,11,.06); --tick:#0b0b0b;
+    --chip:#ecebe6; --chip-ink:#2f2e2b;
+    --label-ink:#0b0b0b; --label-halo:rgba(252,252,251,.95);
+    --tip:#fcfcfbf2; --mark:rgba(184,110,0,.22);
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; height:100%; background:var(--page); color:var(--ink);
+    font:13px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  button { font:inherit; color:inherit; }
+  #app { display:flex; flex-direction:column; height:100vh; }
+
+  /* ---------- header ---------- */
+  header { display:flex; align-items:center; gap:14px; padding:8px 14px; background:var(--panel);
+    border-bottom:1px solid var(--edge); min-height:46px; flex-wrap:wrap; }
+  .brand { font-weight:650; font-size:15px; letter-spacing:.1px; white-space:nowrap; }
+  .brand small { font-weight:400; color:var(--muted); font-size:12px; margin-left:6px; }
+  .badge { font-size:10.5px; font-weight:600; letter-spacing:.04em; text-transform:uppercase;
+    padding:2px 7px; border-radius:999px; background:var(--accent-soft); color:var(--accent-ink); white-space:nowrap; }
+  .meta { color:var(--ink-2); font-size:12px; display:flex; gap:6px 14px; flex-wrap:wrap; flex:1; min-width:0; }
+  .meta b { color:var(--ink); font-weight:600; font-variant-numeric:tabular-nums; }
+  .meta .sep { color:var(--muted); }
+  .privacy { font-size:11.5px; color:var(--ink-2); border:1px solid var(--edge-2); border-radius:999px;
+    padding:3px 10px; white-space:nowrap; }
+  .privacy::before { content:"🔒"; margin-right:5px; font-size:10px; }
+  .iconbtn { background:var(--panel-2); border:1px solid var(--edge); border-radius:8px; cursor:pointer;
+    width:30px; height:28px; display:inline-flex; align-items:center; justify-content:center; }
+  .iconbtn:hover { border-color:var(--edge-2); }
+
+  /* ---------- layout ---------- */
+  #body { flex:1; display:flex; min-height:0; }
+  aside { width:400px; flex:0 0 auto; background:var(--panel); border-right:1px solid var(--edge);
+    display:flex; flex-direction:column; min-height:0; }
+  main { flex:1; position:relative; min-width:0; background:var(--map-bg); }
+
+  /* ---------- sidebar controls ---------- */
+  .ctrl { padding:10px 14px 10px; border-bottom:1px solid var(--edge); display:flex; flex-direction:column; gap:8px; }
+  .ctrl .row { display:flex; align-items:center; gap:8px; }
+  .ctrl label { color:var(--muted); font-size:12px; white-space:nowrap; }
+  select, input[type=search] { background:var(--panel-2); border:1px solid var(--edge); color:var(--ink);
+    border-radius:7px; padding:6px 8px; font:inherit; font-size:12.5px; min-width:0; }
+  select { flex:1; font-weight:600; cursor:pointer; }
+  input[type=search] { width:100%; }
+  select:focus, input:focus { outline:none; border-color:var(--accent); }
+  #searchInfo { font-size:11.5px; color:var(--muted); }
+  #searchList { display:flex; flex-direction:column; gap:1px; max-height:210px; overflow:auto; }
+  .sres { display:flex; gap:8px; align-items:baseline; padding:4px 6px; border-radius:6px; cursor:pointer; font-size:12px; }
+  .sres:hover { background:var(--panel-2); }
+  .sres .lv { color:var(--muted); font-size:10.5px; flex:0 0 auto; width:30px; }
+  .sres .nm { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .sres .ct { color:var(--muted); font-variant-numeric:tabular-nums; font-size:11px; }
+  mark { background:var(--mark); color:inherit; border-radius:2px; padding:0 1px; }
+
+  /* ---------- cards ---------- */
+  #cards { flex:1; overflow:auto; }
+  .card { padding:14px 14px 16px; border-bottom:1px solid var(--edge); }
+  .card .parent { font-style:italic; color:var(--muted); font-size:12px; margin-bottom:3px; }
+  .card .parent a { color:var(--ink-2); cursor:pointer; text-decoration:none; }
+  .card .parent a:hover { color:var(--accent-ink); text-decoration:underline; }
+  .card .title { display:flex; gap:10px; align-items:flex-start; }
+  .card .title h2 { margin:0; font-size:14px; font-weight:650; line-height:1.35; flex:1; }
+  .card.sel .title h2 { color:var(--accent-ink); }
+  .card .cid { color:var(--muted); font-size:12px; font-variant-numeric:tabular-nums; white-space:nowrap; padding-top:1px; }
+  .card .x { background:none; border:0; color:var(--muted); cursor:pointer; font-size:15px; line-height:1; padding:0 2px; }
+  .card .x:hover { color:var(--ink); }
+  .chips { display:flex; flex-wrap:wrap; gap:4px; margin:9px 0 2px; }
+  .chip { background:var(--chip); color:var(--chip-ink); border:1px solid transparent; border-radius:5px;
+    font-size:10.5px; padding:2px 6px; cursor:pointer; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .chip:hover { border-color:var(--accent); }
+  .chip .c { color:var(--muted); margin-left:3px; }
+  .chip.more { color:var(--muted); }
+  .card p.desc { color:var(--ink-2); font-size:12px; margin:10px 0 12px; }
+  .kv { display:grid; grid-template-columns:1fr 1fr; gap:2px 16px; }
+  .kv .k { color:var(--ink-2); font-size:11.5px; font-weight:600; }
+  .kv .v { font-size:12.5px; font-variant-numeric:tabular-nums; }
+  .stats { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px 10px; margin-top:12px; padding-top:11px; border-top:1px solid var(--edge); }
+  .stat .k { color:var(--muted); font-size:10.5px; }
+  .stat .v { font-size:13px; font-weight:600; font-variant-numeric:tabular-nums; }
+  .stat .d { color:var(--muted); font-size:10.5px; font-variant-numeric:tabular-nums; }
+  .facets { margin-top:12px; padding-top:11px; border-top:1px solid var(--edge); display:grid; grid-template-columns:1fr 1fr; gap:12px 16px; }
+  .facet h4 { margin:0 0 5px; font-size:10.5px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.05em; }
+  .facet.wide { grid-column:1 / -1; }
+  .facet.wide .fbar { grid-template-columns:132px 1fr 34px; }
+  .fbar { display:grid; grid-template-columns:62px 1fr 30px; gap:5px; align-items:center; font-size:10.5px; height:15px; }
+  .fbar .l { color:var(--ink-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .fbar .t { position:relative; height:6px; background:var(--bar-track); border-radius:3px; }
+  .fbar .t i { position:absolute; left:0; top:0; bottom:0; background:var(--bar); border-radius:0 3px 3px 0; min-width:1px; }
+  .fbar .t b { position:absolute; top:-2px; bottom:-2px; width:2px; margin-left:-1px; background:var(--tick); opacity:.75; border-radius:1px; }
+  .fbar .n { color:var(--ink-2); text-align:right; font-variant-numeric:tabular-nums; }
+  .flegend { grid-column:1 / -1; color:var(--muted); font-size:10.5px; display:flex; gap:14px; align-items:center; }
+  .flegend .sw { display:inline-block; width:12px; height:6px; background:var(--bar); border-radius:2px; margin-right:5px; vertical-align:middle; }
+  .flegend .tk { display:inline-block; width:2px; height:10px; background:var(--tick); opacity:.75; margin-right:5px; vertical-align:middle; }
+  .flegend .dl { display:inline-block; width:14px; border-top:1.5px dashed var(--muted); margin-right:5px; vertical-align:middle; }
+  .spark { width:100%; height:52px; display:block; overflow:visible; }
+  .spark .axis { fill:var(--muted); font-size:9.5px; }
+  .actions { display:flex; gap:6px; margin-top:12px; }
+  .btn { background:var(--panel-2); border:1px solid var(--edge); border-radius:6px; padding:4px 10px; font-size:11.5px; cursor:pointer; color:var(--ink-2); }
+  .btn:hover { border-color:var(--accent); color:var(--ink); }
+  .hint { color:var(--muted); font-size:12px; padding:12px 14px; line-height:1.5; }
+  .hint kbd { font:inherit; font-size:11px; border:1px solid var(--edge-2); border-radius:4px; padding:0 4px; }
+
+  /* ---------- map ---------- */
+  #mapView, #treeView { position:absolute; inset:0; }
+  #deck { position:absolute; inset:0; }
+  #labels { position:absolute; inset:0; pointer-events:none; overflow:hidden; }
+  .lab { position:absolute; transform:translate(-50%,-50%); text-align:center; color:var(--label-ink);
+    text-shadow:0 0 3px var(--label-halo), 0 0 6px var(--label-halo), 0 1px 1px var(--label-halo);
+    line-height:1.2; white-space:pre; font-weight:500; }
+  .lab.l2 { font-size:13px; font-weight:650; }
+  .lab.l1 { font-size:12px; font-weight:560; }
+  .lab.l0 { font-size:11px; }
+  .lab.sel { color:var(--accent-ink); }
+  .lab.dim { opacity:.42; }
+  #tip { position:absolute; z-index:5; pointer-events:none; display:none; max-width:320px; background:var(--tip);
+    border:1px solid var(--edge-2); border-radius:8px; padding:8px 10px; font-size:12px; box-shadow:0 6px 24px rgba(0,0,0,.25); }
+  #tip .tn { font-weight:600; margin-bottom:2px; }
+  #tip .tm { color:var(--ink-2); font-variant-numeric:tabular-nums; }
+  #tip .tp { color:var(--muted); font-size:11px; margin-top:3px; }
+  .legend { position:absolute; left:12px; bottom:12px; background:color-mix(in srgb, var(--panel) 88%, transparent);
+    border:1px solid var(--edge); border-radius:10px; padding:9px 11px; font-size:11.5px; max-width:300px; backdrop-filter:blur(6px); }
+  .legend h5 { margin:0 0 6px; font-size:11px; color:var(--ink-2); font-weight:600; cursor:pointer; user-select:none; }
+  .legend h5::after { content:" ▾"; color:var(--muted); }
+  .legend.collapsed h5 { margin:0; } .legend.collapsed h5::after { content:" ▸"; }
+  .legend.collapsed > :not(h5) { display:none; }
+  .legend .li { display:flex; gap:7px; align-items:center; padding:1px 0; cursor:pointer; color:var(--ink-2); }
+  .legend .li:hover { color:var(--ink); }
+  .legend .li span:last-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .legend .sw { width:10px; height:10px; border-radius:50%; flex:0 0 auto; }
+  .legend .grad { width:220px; height:10px; border-radius:3px; }
+  .legend .ticks { display:flex; justify-content:space-between; color:var(--muted); font-size:10.5px; margin-top:3px; font-variant-numeric:tabular-nums; width:220px; position:relative; }
+  .legend .avg { position:absolute; top:-15px; width:2px; height:12px; background:var(--tick); margin-left:-1px; }
+  .legend .note { color:var(--muted); font-size:10.5px; margin-top:5px; }
+  .zoom { position:absolute; right:12px; top:12px; display:flex; flex-direction:column; gap:4px; }
+  .fallback { position:absolute; left:50%; top:12px; transform:translateX(-50%); font-size:11.5px; color:var(--muted);
+    background:var(--panel); border:1px solid var(--edge); border-radius:999px; padding:3px 10px; }
+
+  /* ---------- view pills ---------- */
+  .pills { position:absolute; right:14px; bottom:14px; display:flex; gap:6px; z-index:4; }
+  .pill { border:1px solid var(--edge-2); background:color-mix(in srgb, var(--panel-2) 92%, transparent); color:var(--ink-2);
+    border-radius:999px; padding:5px 13px; font-size:12px; cursor:pointer; backdrop-filter:blur(6px); }
+  .pill:hover { color:var(--ink); border-color:var(--accent); }
+  .pill.on { background:var(--pill-on); color:var(--pill-on-ink); border-color:transparent; }
+
+  /* ---------- tree view ---------- */
+  #treeView { display:none; overflow:auto; background:var(--panel); padding:10px 8px 70px; }
+  .trow { display:flex; align-items:baseline; gap:6px; padding:3px 8px; border-radius:6px; cursor:pointer; font-size:12.5px; }
+  .trow:hover { background:var(--panel-2); }
+  .trow.sel { background:var(--accent-soft); }
+  .trow.sel .tn { color:var(--accent-ink); }
+  .trow .tx { width:16px; flex:0 0 16px; text-align:center; color:var(--muted); background:none; border:0; cursor:pointer; padding:0; font-size:13px; }
+  .trow .tx:hover { color:var(--ink); }
+  .trow .dot { width:8px; height:8px; border-radius:50%; flex:0 0 auto; align-self:center; }
+  .trow .tn { font-weight:500; }
+  .trow.l2 .tn { font-weight:600; }
+  .trow .tm { color:var(--muted); font-size:11.5px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .empty { color:var(--muted); padding:20px; }
+
+  @media (max-width: 820px) {
+    #body { flex-direction:column-reverse; }
+    aside { width:auto; height:48vh; border-right:0; border-top:1px solid var(--edge); }
+    main { min-height:52vh; }
+    .meta { display:none; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="brand">Observatorio<small>usage insights</small></div>
+    <span class="badge" id="fixtureBadge" hidden>Synthetic fixture</span>
+    <div class="meta" id="meta"></div>
+    <div class="privacy" id="privacy">Aggregate-only</div>
+    <button class="iconbtn" id="themeBtn" title="Toggle light / dark">◐</button>
+  </header>
+  <div id="body">
+    <aside>
+      <div class="ctrl">
+        <div class="row">
+          <label for="colorBy">Color and sort:</label>
+          <select id="colorBy"></select>
+        </div>
+        <input type="search" id="search" placeholder="Search cluster names and descriptions…" autocomplete="off" />
+        <div id="searchInfo" hidden></div>
+        <div id="searchList"></div>
+      </div>
+      <div id="cards"></div>
+    </aside>
+    <main>
+      <div id="mapView">
+        <div id="deck"></div>
+        <div id="labels"></div>
+        <div id="tip"></div>
+        <div class="legend" id="legend"></div>
+        <div class="zoom">
+          <button class="iconbtn" id="zin" title="Zoom in">+</button>
+          <button class="iconbtn" id="zout" title="Zoom out">−</button>
+          <button class="iconbtn" id="zfit" title="Fit everything">⤢</button>
+        </div>
+        <div class="fallback" id="fallback" hidden>No map_points in this run: showing cluster circles</div>
+      </div>
+      <div id="treeView"></div>
+      <div class="pills">
+        <button class="pill on" id="pMap">Map View</button>
+        <button class="pill" id="pTree">Tree View</button>
+        <button class="pill" id="pClear">× Clear selection</button>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>window.OBS_STATIC = true;</script>
+<script>
+"use strict";
+// ============================================================================
+// Observatorio viewer. Aggregate-only: everything shown is a cluster or a
+// cluster-level statistic. /api/points carries anonymous (x, y, cluster) only.
+// ============================================================================
+const $ = s => document.querySelector(s);
+const fmtN = n => Number(n).toLocaleString('en-US');
+const pct = (v, d) => (v == null ? '–' : v === 0 ? '0%' : (v * 100).toFixed(d ?? (v < 0.01 ? 2 : v < 0.1 ? 1 : 0)) + '%');
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+// ---------------------------------------------------------------- palettes
+// Categorical: 8 fixed slots in order (validated reference palette); tops past 8 fold into "Other".
+const CAT = {
+  dark:  ['#3987e5','#d95926','#199e70','#c98500','#d55181','#008300','#9085e9','#e66767'],
+  light: ['#2a78d6','#eb6834','#1baf7a','#eda100','#e87ba4','#008300','#4a3aa7','#e34948'],
+};
+const OTHER = { dark:'#5f5e59', light:'#bdbbb3' };
+// Sequential: one hue (blue), low values recede toward the surface.
+const SEQ = {
+  dark:  ['#184f95','#1c5cab','#256abf','#2a78d6','#3987e5','#5598e7','#6da7ec','#86b6ef','#9ec5f4','#b7d3f6','#cde2fb'],
+  light: ['#86b6ef','#6da7ec','#5598e7','#3987e5','#2a78d6','#256abf','#1c5cab','#184f95','#104281','#0d366b'],
+};
+// Diverging: red (shrinking) <-> gray <-> blue (growing).
+const DIV = { dark:['#e66767','#4a4a46','#6da7ec'], light:['#d03b3b','#c3c2b7','#1c5cab'] };
+
+const METRICS = [
+  { key:'size', label:'Clusters, sorted by size', kind:'cat' },
+  { key:'concern_mean', label:'Concern score (1–5), sorted', kind:'seq', fmt:v=>v.toFixed(2), short:'Concern',
+    help:'Mean 1–5 concern score of the conversations' },
+  { key:'concern_high_share', label:'High-concern share, sorted', kind:'seq', fmt:v=>pct(v), short:'High concern',
+    help:'Share of conversations with concern ≥ 4' },
+  { key:'moderation_mean', label:'Moderation score, sorted', kind:'seq', fmt:v=>v.toFixed(3), short:'Moderation',
+    help:'Mean of each conversation\'s highest OpenAI-moderation category score (0–1)' },
+  { key:'non_english_share', label:'Non-English share, sorted', kind:'seq', fmt:v=>pct(v), short:'Non-English',
+    help:'Share of conversations not in English' },
+  { key:'turns_mean', label:'Turns per conversation, sorted', kind:'seq', fmt:v=>v.toFixed(1), short:'Turns',
+    help:'Mean number of user turns' },
+  { key:'growth', label:'Growth, sorted', kind:'div', short:'Growth',
+    fmt:v=>(v >= 0 ? '+' : '−') + Math.abs(v * 100).toFixed(0) + '%',
+    help:'Change in the cluster\'s share of all conversations, later half of the period vs. earlier half: (late − early) / (late + early)' },
+];
+const METRIC = Object.fromEntries(METRICS.map(m => [m.key, m]));
+
+// ---------------------------------------------------------------- state
+const st = {
+  theme: 'dark', colorBy: 'size', view: 'map',
+  meta: null, overall: null,
+  nodes: new Map(), roots: [],        // id -> node (from /api/tree); roots sorted by size
+  base: [], baseIndex: new Map(),     // /api/map order (index space of /api/points)
+  topColorSlot: new Map(),            // top id -> slot 0..7 or -1 (Other)
+  domain: {},                         // metric -> [lo, hi]
+  selected: [],                       // selected ids, most recent first
+  expanded: new Set(),
+  search: { q:'', hits:new Set(), visible:new Set(), list:[], total:0 },
+  detail: new Map(),                  // id -> /api/cluster payload (cache)
+  points: null,                       // {n, pos: Float32Array(2n), cidx: Uint16Array}
+  view0: null, viewState: null, radiusK: 1, labelSpacing: {},
+  deck: null, hover: null,
+};
+
+// ---------------------------------------------------------------- requests
+async function fetchJSON(url) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Request failed (${response.status})`);
+  return response.json();
+}
+
+// Static demo mode (observatorio.export_static sets OBS_STATIC on the global object): the same payloads,
+// served as files, and search runs in the browser over an exported index.
+const STATIC = globalThis.OBS_STATIC === true;  // globalThis === window in browsers
+const URLS = STATIC
+  ? { meta: 'data/meta.json', tree: 'data/tree.json', map: 'data/map.json',
+      cluster: id => `data/cluster/${encodeURIComponent(id)}.json` }
+  : { meta: '/api/meta', tree: '/api/tree', map: '/api/map',
+      cluster: id => '/api/cluster/' + encodeURIComponent(id) };
+let searchIndex = null;
+async function searchClusters(query) {
+  if (!STATIC) return fetchJSON('/api/search?q=' + encodeURIComponent(query));
+  searchIndex = searchIndex || await fetchJSON('data/search.json');
+  const needle = query.trim().toLowerCase(), hits = [];
+  for (const { description, ...node } of searchIndex) {  // same rules as /api/search
+    const inName = node.name.toLowerCase().includes(needle);
+    if (inName || description.toLowerCase().includes(needle)) hits.push({ ...node, match: inName ? 'name' : 'description' });
+  }
+  hits.sort((a, b) => (a.match !== 'name') - (b.match !== 'name') || b.level - a.level || b.n - a.n);
+  return { q: query, total: hits.length, results: hits.slice(0, 300) };
+}
+
+// ---------------------------------------------------------------- boot
+async function boot() {
+  initTheme();
+  const [meta, tree, map] = await Promise.all([URLS.meta, URLS.tree, URLS.map].map(fetchJSON));
+  st.meta = meta; st.overall = meta.overall;
+  indexTree(tree.roots);
+  st.base = map.clusters;
+  st.base.forEach((c, i) => st.baseIndex.set(c.id, i));
+  st.roots.forEach((r, i) => st.topColorSlot.set(r.id, i < 8 ? i : -1));
+  computeDomains();
+  renderHeader();
+  initControls();
+  readHash();
+  initMap();
+  renderAll();
+  if (st.selected.length && st.view === 'map') setTimeout(() => zoomToNode(st.selected[0]), 50);
+  if (map.points) loadPoints(map.points); else $('#fallback').hidden = false;
+  addEventListener('hashchange', () => {
+    readHash(); renderAll();
+    if (st.selected.length && st.view === 'map') zoomToNode(st.selected[0]);
+  });
+}
+
+function indexTree(roots) {
+  const walk = (n, parent) => {
+    const kids = n.children || [];
+    const node = { ...n, parent, children: kids.map(k => k.id), baseIdx: [] };
+    st.nodes.set(n.id, node);
+    kids.forEach(k => walk(k, n.id));
+  };
+  roots.forEach(r => walk(r, null));
+  st.roots = roots.map(r => st.nodes.get(r.id));
+  st.topLevel = st.meta.top_level;
+}
+
+function ancestors(id) {  // top first
+  const out = []; let p = st.nodes.get(id)?.parent;
+  while (p) { out.unshift(p); p = st.nodes.get(p).parent; }
+  return out;
+}
+function topOf(id) { const a = ancestors(id); return a.length ? a[0] : id; }
+
+function computeDomains() {
+  // base-cluster index per node, for highlighting + fit-to-bounds
+  st.base.forEach((c, i) => { [...c.path, c.id].forEach(a => st.nodes.get(a)?.baseIdx.push(i)); });
+  for (const m of METRICS) {
+    if (m.kind === 'cat') continue;
+    const vals = st.base.map(c => c.stats[m.key]).filter(v => v != null).sort((a, b) => a - b);
+    if (!vals.length) { st.domain[m.key] = null; continue; }
+    const q = p => vals[Math.min(vals.length - 1, Math.max(0, Math.round(p * (vals.length - 1))))];
+    if (m.kind === 'div') { const a = Math.max(Math.abs(q(0.02)), Math.abs(q(0.98))) || 1; st.domain[m.key] = [-a, a]; }
+    else {
+      let lo = q(0.02), hi = q(0.98);
+      if (m.key === 'concern_mean') lo = 1;
+      if (m.key.endsWith('share') || m.key === 'moderation_mean') lo = 0;
+      st.domain[m.key] = [lo, hi > lo ? hi : lo + 1];
+    }
+  }
+}
+
+// ---------------------------------------------------------------- colour
+function hexRgb(h) { const n = parseInt(h.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; }
+function ramp(stops, t) {
+  t = Math.max(0, Math.min(1, t));
+  const f = t * (stops.length - 1), i = Math.min(stops.length - 2, Math.floor(f)), u = f - i;
+  const a = hexRgb(stops[i]), b = hexRgb(stops[i + 1]);
+  return [0, 1, 2].map(k => Math.round(a[k] + (b[k] - a[k]) * u));
+}
+function metricColor(key, v) {
+  if (v == null || !st.domain[key]) return hexRgb(OTHER[st.theme]);
+  const [lo, hi] = st.domain[key];
+  if (METRIC[key].kind === 'div') return ramp(DIV[st.theme], (v - lo) / (hi - lo));
+  return ramp(SEQ[st.theme], (v - lo) / (hi - lo));
+}
+function topColor(topId) {
+  const s = st.topColorSlot.get(topId);
+  return hexRgb(s >= 0 ? CAT[st.theme][s] : OTHER[st.theme]);
+}
+function nodeColor(node) {
+  if (st.colorBy === 'size') return topColor(topOf(node.id));
+  return metricColor(st.colorBy, node.stats[st.colorBy]);
+}
+const rgbCss = c => `rgb(${c[0]},${c[1]},${c[2]})`;
+
+function sortKey(node) {
+  if (st.colorBy === 'size') return -node.n;
+  const v = node.stats[st.colorBy];
+  return v == null ? Infinity : -v;
+}
+function sortedKids(node) { return node.children.map(k => st.nodes.get(k)).sort((a, b) => sortKey(a) - sortKey(b)); }
+function sortedRoots() { return [...st.roots].sort((a, b) => sortKey(a) - sortKey(b)); }
+
+// ---------------------------------------------------------------- header
+function renderHeader() {
+  const m = st.meta.meta, lv = st.meta.levels;
+  const levels = Object.keys(lv).sort((a, b) => b - a).map(k => fmtN(lv[k])).join(' · ');
+  const month = s => (s || '').slice(0, 7);
+  $('#meta').innerHTML = [
+    `<span>${esc(m.dataset || '')}</span>`,
+    `<span><b>${fmtN(st.meta.n_published_conversations)}</b> conversations</span>`,
+    m.n_users != null ? `<span><b>${fmtN(m.n_users)}</b> users</span>` : '',
+    `<span title="clusters per level, top to base"><b>${levels}</b> clusters</span>`,
+    m.n_suppressed_clusters != null ? `<span title="base clusters withheld for falling under the privacy thresholds"><b>${fmtN(m.n_suppressed_clusters)}</b> suppressed</span>` : '',
+    m.date_start ? `<span>${month(m.date_start)} – ${month(m.date_end)}</span>` : '',
+    `<span class="sep" title="LLM · embedding model">${esc((m.llm_model || '').split('/').pop())} · ${esc((m.embed_model || '').split('/').pop())}</span>`,
+  ].join('');
+  $('#privacy').textContent = `Aggregate-only · every cluster has ≥ ${m.min_users} users and ≥ ${m.min_conversations} conversations`;
+  $('#privacy').title = 'No individual conversation, user or message is ever shown. Map dots are anonymous positions only.';
+  $('#fixtureBadge').hidden = m.is_fixture !== 'true';
+  document.title = 'Observatorio · ' + (m.run_id || '');
+}
+
+// ---------------------------------------------------------------- controls
+function initControls() {
+  $('#colorBy').innerHTML = METRICS.map(m => `<option value="${m.key}">${m.label}</option>`).join('');
+  $('#colorBy').value = st.colorBy;
+  $('#colorBy').onchange = e => { st.colorBy = e.target.value; writeHash(); renderAll(); };
+  let t = null;
+  $('#search').oninput = e => { clearTimeout(t); t = setTimeout(() => runSearch(e.target.value), 140); };
+  $('#search').onkeydown = e => { if (e.key === 'Escape') { e.target.value = ''; runSearch(''); } };
+  $('#pMap').onclick = () => setView('map');
+  $('#pTree').onclick = () => setView('tree');
+  $('#pClear').onclick = () => { st.selected = []; $('#search').value = ''; runSearch(''); writeHash(); renderAll(); };
+  $('#themeBtn').onclick = () => setTheme(st.theme === 'dark' ? 'light' : 'dark');
+  $('#zin').onclick = () => zoomBy(1);
+  $('#zout').onclick = () => zoomBy(-1);
+  $('#zfit').onclick = () => flyTo(st.view0);
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && document.activeElement !== $('#search')) { st.selected = []; writeHash(); renderAll(); }
+  });
+}
+
+function initTheme() {
+  let t = new URLSearchParams(location.search).get('theme');
+  try { t = t || localStorage.getItem('obs-theme'); } catch (e) { /* storage unavailable */ }
+  st.theme = t === 'light' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = st.theme;
+}
+function setTheme(t) {
+  st.theme = t; document.documentElement.dataset.theme = t;
+  try { localStorage.setItem('obs-theme', t); } catch (e) { /* ignore */ }
+  renderAll();
+}
+
+function setView(v) {
+  st.view = v;
+  $('#mapView').style.display = v === 'map' ? '' : 'none';
+  $('#treeView').style.display = v === 'tree' ? 'block' : 'none';
+  $('#pMap').classList.toggle('on', v === 'map');
+  $('#pTree').classList.toggle('on', v === 'tree');
+  writeHash();
+  if (v === 'tree') { renderTree(); scrollTreeToSelection(); }
+  else { st.deck?.redraw(true); scheduleLabels(); }
+}
+
+// ---------------------------------------------------------------- selection
+function select(id, { add = false, zoom = false, reveal = true } = {}) {
+  if (!st.nodes.has(id)) return;
+  if (add) st.selected = [id, ...st.selected.filter(s => s !== id)].slice(0, 6);
+  else st.selected = [id];
+  if (reveal) ancestors(id).forEach(a => st.expanded.add(a));
+  writeHash();
+  renderAll();
+  if (zoom && st.view === 'map') zoomToNode(id);
+  if (st.view === 'tree') scrollTreeToSelection();
+}
+function deselect(id) { st.selected = st.selected.filter(s => s !== id); writeHash(); renderAll(); }
+
+function writeHash() {
+  const p = new URLSearchParams();
+  if (st.selected.length) p.set('c', st.selected.join(','));
+  if (st.view !== 'map') p.set('view', st.view);
+  if (st.colorBy !== 'size') p.set('color', st.colorBy);
+  history.replaceState(null, '', p.toString() ? '#' + p : location.pathname + location.search);
+}
+function readHash() {
+  const p = new URLSearchParams(location.hash.slice(1));
+  st.selected = (p.get('c') || '').split(',').filter(id => st.nodes.has(id));
+  st.selected.forEach(id => ancestors(id).forEach(a => st.expanded.add(a)));
+  st.colorBy = METRIC[p.get('color')] ? p.get('color') : 'size';
+  $('#colorBy').value = st.colorBy;
+  const view = p.get('view') === 'tree' ? 'tree' : 'map';
+  if (view !== st.view) setTimeout(() => setView(view));
+}
+
+function renderAll() {
+  renderLegend();
+  renderCards();
+  renderSearchList();
+  if (st.view === 'tree') renderTree();
+  updateMapLayers(true);
+  scheduleLabels();
+}
+
+// ---------------------------------------------------------------- search
+async function runSearch(q) {
+  st.search.q = q.trim();
+  if (st.search.q.length < 2) {
+    st.search = { q: st.search.q, hits: new Set(), visible: new Set(), list: [], total: 0 };
+  } else {
+    const query = st.search.q;
+    let r;
+    try {
+      r = await searchClusters(query);
+    } catch (error) {
+      if (st.search.q !== query) return;
+      st.search = { q: query, hits: new Set(), visible: new Set(), list: [], total: 0, error: error.message };
+      renderAll();
+      return;
+    }
+    if (r.q.trim() !== st.search.q) return;  // a newer query is in flight
+    const hits = new Set(r.results.map(h => h.id)), visible = new Set();
+    hits.forEach(id => { visible.add(id); ancestors(id).forEach(a => visible.add(a)); });
+    st.search = { q: st.search.q, hits, visible, list: r.results, total: r.total };
+  }
+  renderAll();
+}
+function hl(text) {
+  const q = st.search.q; if (q.length < 2) return esc(text);
+  const i = text.toLowerCase().indexOf(q.toLowerCase());
+  return i < 0 ? esc(text) : esc(text.slice(0, i)) + '<mark>' + esc(text.slice(i, i + q.length)) + '</mark>' + esc(text.slice(i + q.length));
+}
+function renderSearchList() {
+  const s = st.search, info = $('#searchInfo'), list = $('#searchList');
+  if (s.q.length < 2) { info.hidden = true; list.innerHTML = ''; return; }
+  info.hidden = false;
+  if (s.error) {
+    info.textContent = 'Search failed. ';
+    const retry = document.createElement('button');
+    retry.className = 'btn'; retry.textContent = 'Retry';
+    retry.onclick = () => runSearch(s.q); info.append(retry); list.innerHTML = ''; return;
+  }
+  info.textContent = s.total ? `${s.total} cluster${s.total > 1 ? 's' : ''} match · highlighted on the map and filtered in the tree` : 'No cluster matches';
+  const lvName = l => l === st.topLevel ? 'Top' : l === 0 ? 'Base' : 'Mid';
+  list.innerHTML = s.list.slice(0, 40).map(h =>
+    `<div class="sres" data-id="${h.id}"><span class="lv">${lvName(h.level)}</span><span class="nm">${h.match === 'name' ? hl(h.name) : esc(h.name) + ' <span style="color:var(--muted)">(in description)</span>'}</span><span class="ct">${fmtN(h.n)}</span></div>`).join('');
+  list.querySelectorAll('.sres').forEach(el => el.onclick = ev => select(el.dataset.id, { add: ev.shiftKey || ev.metaKey || ev.ctrlKey, zoom: true }));
+}
+
+// ---------------------------------------------------------------- sidebar cards
+async function getDetail(id) {
+  if (!st.detail.has(id)) {
+    st.detail.set(id, fetchJSON(URLS.cluster(id)).catch(error => {
+      st.detail.delete(id);
+      throw error;
+    }));
+  }
+  return st.detail.get(id);
+}
+let cardsToken = 0;
+async function renderCards() {
+  const token = ++cardsToken, box = $('#cards');
+  if (!st.selected.length) { box.innerHTML = overviewCard(); box.dataset.primary = ''; wireCards(box); return; }
+  box.innerHTML = '<div class="hint" role="status">Loading cluster details…</div>';
+  let details;
+  try {
+    details = await Promise.all(st.selected.map(getDetail));
+  } catch (error) {
+    if (token !== cardsToken) return;
+    box.innerHTML = `<div class="hint" role="alert">Could not load cluster details: ${esc(error.message)} <button class="btn" data-retry>Retry</button></div>`;
+    box.querySelector('[data-retry]').onclick = () => renderCards();
+    return;
+  }
+  if (token !== cardsToken) return;
+  if (box.dataset.primary !== st.selected[0]) { box.scrollTop = 0; box.dataset.primary = st.selected[0]; }
+  box.innerHTML = details.map((d, i) => clusterCard(d, i === 0)).join('') +
+    `<div class="hint">Shift-click clusters to compare them side by side. <kbd>Esc</kbd> clears the selection.</div>`;
+  wireCards(box);
+}
+function wireCards(box) {
+  box.querySelectorAll('[data-sel]').forEach(el => el.onclick = ev => { ev.preventDefault(); select(el.dataset.sel, { add: ev.shiftKey || ev.metaKey || ev.ctrlKey, zoom: true }); });
+  box.querySelectorAll('[data-close]').forEach(el => el.onclick = () => deselect(el.dataset.close));
+  box.querySelectorAll('[data-more]').forEach(el => el.onclick = () => { el.closest('.chips').querySelectorAll('.chip[hidden]').forEach(c => c.hidden = false); el.remove(); });
+  box.querySelectorAll('[data-map]').forEach(el => el.onclick = () => { setView('map'); zoomToNode(el.dataset.map); });
+  box.querySelectorAll('[data-tree]').forEach(el => el.onclick = () => { ancestors(el.dataset.tree).forEach(a => st.expanded.add(a)); st.expanded.add(el.dataset.tree); setView('tree'); });
+}
+
+function overviewCard() {
+  const o = st.overall, m = st.meta.meta;
+  const chips = sortedRoots().map(r => `<span class="chip" data-sel="${r.id}" title="${esc(r.name)}">${esc(r.name)}<span class="c">(${fmtN(r.n)})</span></span>`).join('');
+  return `<div class="card">
+    <div class="parent">All published conversations</div>
+    <div class="title"><h2>${esc(m.dataset || 'All conversations')}</h2></div>
+    <div class="chips">${chips}</div>
+    <p class="desc">${fmtN(st.meta.n_published_conversations)} conversations grouped into ${fmtN(st.meta.levels['0'] || 0)} base clusters and a ${Object.keys(st.meta.levels).length}-level hierarchy. Click a region on the map or a row in the Tree View to open a cluster here.</p>
+    <div class="kv"><div class="k">Count</div><div class="k">Users</div>
+      <div class="v">${fmtN(st.meta.n_published_conversations)}</div><div class="v">${m.n_users != null ? fmtN(m.n_users) : '–'}</div></div>
+    ${statsGrid(o.stats, null)}
+    ${facetCharts(o.facets, null)}
+  </div>`;
+}
+
+function clusterCard(d, primary) {
+  const node = st.nodes.get(d.id);
+  const anc = d.ancestors.map(a => `<a data-sel="${a.id}">${esc(a.name)}</a>`).join(' › ');
+  const parentLine = anc ? `Parent: ${anc}` : 'Top-level category';
+  const kids = node ? sortedKids(node) : [];
+  const SHOW = 6;
+  const chips = kids.map((k, i) => `<span class="chip" data-sel="${k.id}" ${i >= SHOW ? 'hidden' : ''} title="${esc(k.name)}">${esc(k.name)}<span class="c">(${fmtN(k.n)})</span></span>`).join('')
+    + (kids.length > SHOW ? `<span class="chip more" data-more>+${kids.length - SHOW} more</span>` : '');
+  const levelWord = d.level === st.topLevel ? 'top-level' : d.level === 0 ? 'base' : 'mid-level';
+  return `<div class="card ${primary ? 'sel' : ''}">
+    <div class="parent">${parentLine}</div>
+    <div class="title"><h2>${esc(d.name)}</h2><span class="cid" title="${levelWord} cluster">#${esc(d.id)}</span>
+      <button class="x" data-close="${d.id}" title="Remove from selection">×</button></div>
+    ${kids.length ? `<div class="chips">${chips}</div>` : ''}
+    <p class="desc">${esc(d.description)}</p>
+    <div class="kv"><div class="k">Count (%)</div><div class="k">Users</div>
+      <div class="v">${fmtN(d.n)} (${pct(d.share, 2)})</div><div class="v">${fmtN(d.users)}</div></div>
+    ${statsGrid(d.stats, st.overall.stats)}
+    ${facetCharts(d.facets, st.overall.facets)}
+    <div class="actions">
+      <button class="btn" data-map="${d.id}">Show on map</button>
+      <button class="btn" data-tree="${d.id}">Show in tree</button>
+    </div>
+  </div>`;
+}
+
+function statsGrid(s, base) {
+  const cells = METRICS.filter(m => m.kind !== 'cat').map(m => {
+    const v = s[m.key];
+    const d = base && base[m.key] != null ? `all ${m.fmt(base[m.key])}` : '';
+    return `<div class="stat" title="${esc(m.help)}"><div class="k">${m.short}</div><div class="v">${v == null ? '–' : m.fmt(v)}</div>${d ? `<div class="d">${d}</div>` : ''}</div>`;
+  });
+  return `<div class="stats">${cells.join('')}</div>`;
+}
+
+const CONCERN_LABEL = { '1':'1 · none', '2':'2 · low', '3':'3 · moderate', '4':'4 · high', '5':'5 · extreme' };
+const SHORT = { 'United States':'US', 'United Kingdom':'UK', 'United Arab Emirates':'UAE', 'South Korea':'S. Korea', 'Saudi Arabia':'Saudi Arabia' };
+const TURNS_LABEL = { '1':'1 turn', '2':'2 turns', '3-5':'3–5 turns', '6+':'6+ turns' };
+function topK(items, k) {
+  const main = items.filter(([key]) => key !== 'Other');
+  if (main.length <= k) return items;
+  const rest = main.slice(k).reduce((a, [, v]) => a + v, 0) + (items.find(([key]) => key === 'Other')?.[1] || 0);
+  return [...main.slice(0, k), ['Other', rest]];
+}
+function bars(title, items, base, labelMap, wide) {
+  if (!items || !items.length) return '';
+  const bmap = new Map(base || []);
+  // keys the cluster lacks but the baseline has are irrelevant here; 'Other' baseline = remainder
+  const baseOf = key => key === 'Other' && base ? Math.max(0, 1 - items.filter(([k]) => k !== 'Other').reduce((a, [k]) => a + (bmap.get(k) || 0), 0)) : bmap.get(key);
+  const max = Math.max(...items.map(([k, v]) => Math.max(v, base ? (baseOf(k) || 0) : 0)), 1e-9);
+  const rows = items.map(([k, v]) => {
+    const b = base ? baseOf(k) : null;
+    const tip = `${labelMap?.[k] || k}: ${pct(v, 1)} of this cluster` + (b != null ? ` · ${pct(b, 1)} of all conversations` : '');
+    return `<div class="fbar" title="${esc(tip)}"><span class="l">${esc(labelMap?.[k] || k)}</span>
+      <span class="t"><i style="width:${(v / max * 100).toFixed(1)}%"></i>${b != null ? `<b style="left:${(b / max * 100).toFixed(1)}%"></b>` : ''}</span>
+      <span class="n">${pct(v)}</span></div>`;
+  }).join('');
+  return `<div class="facet ${wide ? 'wide' : ''}"><h4>${title}</h4>${rows}</div>`;
+}
+function sparkline(items, base) {
+  if (!items || items.length < 2) return '';
+  const W = 340, H = 40, bmap = new Map(base || []);
+  const vals = items.map(([, v]) => v), bvals = items.map(([k]) => bmap.get(k) ?? null);
+  const max = Math.max(...vals, ...bvals.filter(v => v != null)) * 1.1 || 1;
+  const x = i => (i / (items.length - 1)) * W, y = v => H - (v / max) * H;
+  const path = arr => arr.map((v, i) => v == null ? '' : `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join('');
+  const hits = items.map(([k, v], i) => {
+    const b = bmap.get(k);
+    const w = W / (items.length - 1);
+    return `<rect x="${(x(i) - w / 2).toFixed(1)}" y="0" width="${w.toFixed(1)}" height="${H}" fill="transparent"><title>${k}: ${pct(v, 1)} of this cluster${b != null ? ` · ${pct(b, 1)} of all conversations` : ''}</title></rect>`;
+  }).join('');
+  return `<div class="facet wide"><h4>Monthly volume (share of the cluster's conversations)</h4>
+    <svg class="spark" viewBox="0 -2 ${W} ${H + 14}" preserveAspectRatio="none">
+      ${base ? `<path d="${path(bvals)}" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>` : ''}
+      <path d="${path(vals)}" fill="none" stroke="var(--bar)" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>
+      <text class="axis" x="0" y="${H + 11}">${items[0][0]}</text>
+      <text class="axis" x="${W}" y="${H + 11}" text-anchor="end">${items[items.length - 1][0]}</text>
+      ${hits}
+    </svg></div>`;
+}
+function facetCharts(f, base) {
+  if (!f) return '';
+  const b = k => base ? base[k] : null;
+  const legend = base ? `<div class="flegend"><span><span class="sw"></span>this cluster</span><span><span class="tk"></span>all conversations</span><span><span class="dl"></span>all (trend)</span></div>` : '';
+  return `<div class="facets">
+    ${bars('Language', topK(f.language || [], 5), b('language'))}
+    ${bars('Country', topK(f.country || [], 5), b('country'), SHORT)}
+    ${bars('Model', f.model, b('model'), null, true)}
+    ${bars('Concern', f.concern, b('concern'), CONCERN_LABEL)}
+    ${bars('Turns', f.turns, b('turns'), TURNS_LABEL, false)}
+    ${sparkline(f.month, b('month'))}
+    ${legend}
+  </div>`;
+}
+
+// ---------------------------------------------------------------- tree view
+function renderTree() {
+  const box = $('#treeView');
+  const filtering = st.search.q.length >= 2;
+  const sel = new Set(st.selected);
+  const out = [];
+  const walk = (node, depth) => {
+    if (filtering && !st.search.visible.has(node.id)) return;
+    const kids = sortedKids(node);
+    const open = filtering ? kids.some(k => st.search.visible.has(k.id)) : st.expanded.has(node.id);
+    const m = METRIC[st.colorBy];
+    const extra = m.kind !== 'cat' && node.stats[m.key] != null ? `, ${m.short.toLowerCase()} ${m.fmt(node.stats[m.key])}` : '';
+    const nm = filtering && st.search.hits.has(node.id) ? hl(node.name) : esc(node.name);
+    out.push(`<div class="trow l${node.level} ${sel.has(node.id) ? 'sel' : ''}" data-id="${node.id}" style="padding-left:${8 + depth * 22}px">
+      <button class="tx" data-tog="${node.id}" ${kids.length ? '' : 'disabled style="visibility:hidden"'}>${open ? '−' : '+'}</button>
+      <span class="dot" style="background:${rgbCss(nodeColor(node))}"></span>
+      <span><span class="tn">${nm}</span> <span class="tm">(${pct(node.share, node.share < 0.001 ? 2 : 1)}, ${fmtN(node.n)} conversations${kids.length ? `, ${kids.length} children` : ''}${extra})</span></span>
+    </div>`);
+    if (open) kids.forEach(k => walk(k, depth + 1));
+  };
+  sortedRoots().forEach(r => walk(r, 0));
+  box.innerHTML = out.join('') || `<div class="empty">No cluster matches “${esc(st.search.q)}”.</div>`;
+  box.querySelectorAll('.trow').forEach(el => el.onclick = ev => {
+    const id = el.dataset.id;
+    if (ev.target.dataset.tog) {
+      st.expanded.has(id) ? st.expanded.delete(id) : st.expanded.add(id);
+      renderTree(); return;
+    }
+    if (!st.expanded.has(id)) st.expanded.add(id);
+    select(id, { add: ev.shiftKey || ev.metaKey || ev.ctrlKey });
+  });
+}
+function scrollTreeToSelection() {
+  requestAnimationFrame(() => $('#treeView .trow.sel')?.scrollIntoView({ block: 'nearest' }));
+}
+
+// ---------------------------------------------------------------- map
+function initMap() {
+  const el = $('#deck');
+  // world bounds from base clusters
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  st.base.forEach(c => { x0 = Math.min(x0, c.x); x1 = Math.max(x1, c.x); y0 = Math.min(y0, c.y); y1 = Math.max(y1, c.y); });
+  // circle radius ~ sqrt(n), scaled to the median nearest-neighbour spacing
+  const nn = level => {
+    const pts = [...st.nodes.values()].filter(n => n.level === level);
+    const d = pts.map(a => { let m = Infinity; for (const b of pts) if (b !== a) m = Math.min(m, Math.hypot(a.x - b.x, a.y - b.y)); return m; }).filter(isFinite).sort((a, b) => a - b);
+    return d.length ? d[Math.floor(d.length / 2)] : 1;
+  };
+  Object.keys(st.meta.levels).forEach(l => { st.labelSpacing[l] = nn(+l); });
+  const medN = [...st.base.map(c => c.n)].sort((a, b) => a - b)[Math.floor(st.base.length / 2)] || 1;
+  st.radiusK = (st.labelSpacing['0'] * 0.5) / Math.sqrt(medN);
+  if (!st.base.length) { x0 = y0 = -1; x1 = y1 = 1; }
+  const rmax = Math.max(0, ...st.base.map(c => st.radiusK * Math.sqrt(c.n)));
+  st.bounds = [x0 - rmax, y0 - rmax, x1 + rmax, y1 + rmax];
+  st.view0 = fitBounds(st.bounds, 0.04);
+  st.viewState = { ...st.view0 };
+  st.deck = new deck.Deck({
+    parent: el,
+    views: new deck.OrthographicView({ id: 'ortho' }),
+    initialViewState: st.view0,
+    controller: { inertia: 250, scrollZoom: { speed: 0.02, smooth: true } },
+    getCursor: ({ isHovering, isDragging }) => isDragging ? 'grabbing' : isHovering ? 'pointer' : 'grab',
+    onViewStateChange: ({ viewState }) => { st.viewState = viewState; scheduleLabels(); updatePointRadius(); },
+    onHover: info => showTip(info),
+    onClick: (info, ev) => {
+      if (info.layer?.id === 'clusters' && info.index >= 0) {
+        select(st.base[info.object].id, { add: ev.srcEvent.shiftKey || ev.srcEvent.metaKey || ev.srcEvent.ctrlKey });
+      }
+    },
+    layers: [],
+  });
+  new ResizeObserver(() => scheduleLabels()).observe(el);
+}
+
+function fitBounds([x0, y0, x1, y1], pad) {
+  const el = $('#deck'), w = el.clientWidth || 800, h = el.clientHeight || 600;
+  const dx = Math.max(x1 - x0, 1e-3) * (1 + 2 * pad), dy = Math.max(y1 - y0, 1e-3) * (1 + 2 * pad);
+  const zoom = Math.log2(Math.min(w / dx, h / dy));
+  return { target: [(x0 + x1) / 2, (y0 + y1) / 2, 0], zoom, minZoom: zoom - 1.5, maxZoom: zoom + 7 };
+}
+function flyTo(vs) {
+  st.deck.setProps({ initialViewState: { ...vs, minZoom: st.view0.minZoom, maxZoom: st.view0.maxZoom,
+    transitionDuration: 650, transitionInterpolator: new deck.LinearInterpolator(['target', 'zoom']) } });
+}
+function zoomBy(dz) { flyTo({ ...st.viewState, zoom: Math.min(st.view0.maxZoom, Math.max(st.view0.minZoom, st.viewState.zoom + dz)) }); }
+function zoomToNode(id) {
+  const node = st.nodes.get(id); if (!node) return;
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  node.baseIdx.forEach(i => {
+    const c = st.base[i], r = st.radiusK * Math.sqrt(c.n) * 1.6;
+    x0 = Math.min(x0, c.x - r); x1 = Math.max(x1, c.x + r); y0 = Math.min(y0, c.y - r); y1 = Math.max(y1, c.y + r);
+  });
+  const vs = fitBounds([x0, y0, x1, y1], 0.12);
+  vs.zoom = Math.min(vs.zoom, st.view0.zoom + 4.5);
+  flyTo(vs);
+}
+
+async function loadPoints(url) {
+  try {
+    const buf = await fetch(url).then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); });
+    const dv = new DataView(buf);
+    const magic = String.fromCharCode(...new Uint8Array(buf, 0, 4));
+    if (magic !== 'OBSP' || dv.getUint32(4, true) !== 1) throw new Error('bad points payload');
+    const n = dv.getUint32(8, true);
+    const xs = new Float32Array(buf, 16, n), ys = new Float32Array(buf, 16 + 4 * n, n), cidx = new Uint16Array(buf, 16 + 8 * n, n);
+    const pos = new Float32Array(2 * n);
+    for (let i = 0; i < n; i++) { pos[2 * i] = xs[i]; pos[2 * i + 1] = ys[i]; }
+    st.points = { n, pos, cidx };
+    updateMapLayers(true);
+  } catch (e) {
+    console.warn('points unavailable, falling back to circles', e);
+    $('#fallback').hidden = false;
+  }
+}
+
+// which base clusters are "active" (selected / search hits); null = everything
+function activeBase() {
+  const set = new Set();
+  let any = false;
+  if (st.selected.length) { any = true; st.selected.forEach(id => st.nodes.get(id)?.baseIdx.forEach(i => set.add(i))); }
+  else if (st.search.q.length >= 2) { any = true; st.search.hits.forEach(id => st.nodes.get(id)?.baseIdx.forEach(i => set.add(i))); }
+  return any ? set : null;
+}
+
+let layerCache = { colors: null, key: '' };
+function updateMapLayers(recolor) {
+  if (!st.deck) return;
+  const act = activeBase();
+  const dark = st.theme === 'dark';
+  const baseCol = st.base.map(c => nodeColor(st.nodes.get(c.id)));
+  const hasPts = !!st.points;
+  const layers = [];
+  if (hasPts) {
+    const key = [st.colorBy, st.theme, st.selected.join(','), st.search.q, [...st.search.hits].length].join('|');
+    if (recolor || layerCache.key !== key || !layerCache.colors) {
+      const { n, cidx } = st.points, col = new Uint8Array(4 * n);
+      const aOn = dark ? 225 : 235, aOff = dark ? 50 : 60, aAll = dark ? 175 : 190;
+      const lut = baseCol.map((c, i) => [c[0], c[1], c[2], act ? (act.has(i) ? aOn : aOff) : aAll]);
+      for (let i = 0; i < n; i++) { const c = lut[cidx[i]]; col.set(c, 4 * i); }
+      layerCache = { colors: col, key };
+    }
+    layers.push(new deck.ScatterplotLayer({
+      id: 'points',
+      data: { length: st.points.n, attributes: {
+        getPosition: { value: st.points.pos, size: 2 },
+        getFillColor: { value: layerCache.colors, size: 4, normalized: true },
+      } },
+      radiusUnits: 'pixels', getRadius: 1, radiusScale: pointRadius(), stroked: false, pickable: false,
+      updateTriggers: { getFillColor: layerCache.key },
+    }));
+  }
+  // cluster circles: the pickable layer (visible fill only when there are no points)
+  const selBase = new Set(st.selected.filter(id => st.nodes.get(id)?.level === 0).map(id => st.baseIndex.get(id)));
+  const order = st.base.map((_, i) => i).sort((a, b) => st.base[b].n - st.base[a].n);  // small on top
+  layers.push(new deck.ScatterplotLayer({
+    id: 'clusters', data: order,
+    getPosition: i => [st.base[i].x, st.base[i].y],
+    getRadius: i => st.radiusK * Math.sqrt(st.base[i].n),
+    radiusUnits: 'common', radiusMinPixels: 2.5,
+    filled: true, stroked: true,
+    getFillColor: i => {
+      if (hasPts) return [0, 0, 0, 0];
+      const c = baseCol[i]; return [c[0], c[1], c[2], act ? (act.has(i) ? 225 : 35) : 200];
+    },
+    getLineColor: i => selBase.has(i) ? hexRgb(dark ? '#e8a23a' : '#b86e00').concat(255) : hasPts ? [0, 0, 0, 0] : (dark ? [14, 14, 13, 200] : [252, 252, 251, 220]),
+    lineWidthUnits: 'pixels', getLineWidth: i => selBase.has(i) ? 2 : 0.6,
+    pickable: true, autoHighlight: true,
+    highlightColor: dark ? [232, 162, 58, 70] : [184, 110, 0, 55],
+    updateTriggers: { getFillColor: [st.colorBy, st.theme, st.selected.join(','), st.search.q, hasPts], getLineColor: [st.selected.join(','), st.theme, hasPts], getLineWidth: st.selected.join(',') },
+  }));
+  st.deck.setProps({ layers });
+}
+function pointRadius() {
+  const dz = (st.viewState?.zoom ?? 0) - (st.view0?.zoom ?? 0);
+  return Math.max(0.9, Math.min(3.2, 1.25 * Math.pow(2, dz * 0.45)));
+}
+let lastRadius = 0;
+function updatePointRadius() {
+  if (!st.points) return;
+  const r = pointRadius();
+  if (Math.abs(r - lastRadius) > 0.08) { lastRadius = r; updateMapLayers(false); }
+}
+
+function showTip(info) {
+  const tip = $('#tip');
+  if (info.layer?.id !== 'clusters' || !(info.index >= 0)) { tip.style.display = 'none'; return; }
+  const c = st.base[info.object], node = st.nodes.get(c.id);
+  const m = METRIC[st.colorBy];
+  const metric = m.kind !== 'cat' && c.stats[m.key] != null ? `<div class="tm">${m.short}: <b>${m.fmt(c.stats[m.key])}</b> <span style="color:var(--muted)">(all ${m.fmt(st.overall.stats[m.key])})</span></div>` : '';
+  tip.innerHTML = `<div class="tn">${esc(c.name)}</div>
+    <div class="tm">${fmtN(c.n)} conversations (${pct(c.share, 2)}) · ${fmtN(node.users)} users</div>${metric}
+    <div class="tp">${c.path.map(p => esc(st.nodes.get(p).name)).join(' › ')}</div>`;
+  tip.style.display = 'block';
+  const W = $('#mapView').clientWidth, H = $('#mapView').clientHeight;
+  const tw = tip.offsetWidth, th = tip.offsetHeight;
+  tip.style.left = Math.min(info.x + 14, W - tw - 8) + 'px';
+  tip.style.top = Math.min(info.y + 14, H - th - 8) + 'px';
+}
+
+// ---------------------------------------------------------------- labels (HTML overlay, greedy de-overlap)
+let labelsQueued = false;
+function scheduleLabels() {
+  if (labelsQueued) return;
+  labelsQueued = true;
+  requestAnimationFrame(() => { labelsQueued = false; renderLabels(); });
+}
+function wrap(text, maxChars) {
+  const words = text.split(' '), lines = [];
+  let cur = '';
+  for (const w of words) {
+    if (cur && (cur + ' ' + w).length > maxChars) { lines.push(cur); cur = w; } else cur = cur ? cur + ' ' + w : w;
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+function renderLabels() {
+  const box = $('#labels');
+  if (st.view !== 'map' || !st.viewState) { box.innerHTML = ''; return; }
+  const W = box.clientWidth, H = box.clientHeight;
+  const { target, zoom } = st.viewState, s = Math.pow(2, zoom);
+  const proj = n => [(n.x - target[0]) * s + W / 2, (n.y - target[1]) * s + H / 2];
+  // finest level whose typical spacing on screen leaves room for a label
+  const levels = Object.keys(st.meta.levels).map(Number).sort((a, b) => a - b);
+  const need = { 0: 95, 1: 120 };
+  let lvl = st.topLevel;
+  for (const l of levels) { if (l === st.topLevel) break; if (st.labelSpacing[l] * s >= (need[l] ?? 120)) { lvl = l; break; } }
+  const sel = new Set(st.selected);
+  const active = activeBase();
+  const cands = [];
+  st.selected.forEach(id => cands.push(st.nodes.get(id)));
+  for (const n of st.nodes.values()) if (n.level === lvl && !sel.has(n.id)) cands.push(n);
+  const origin = box.getBoundingClientRect();
+  const placed = ['#legend', '.zoom', '.pills'].map(sel => $(sel).getBoundingClientRect())
+    .filter(r => r.width).map(r => [r.left - origin.left - 4, r.top - origin.top - 4, r.right - origin.left + 4, r.bottom - origin.top + 4]);
+  const nObstacles = placed.length, html = [];
+  const size = { 0: 11, 1: 12 }[lvl] ?? 13;
+  const maxChars = lvl === st.topLevel ? 24 : lvl === 0 ? 22 : 22;
+  for (const n of cands.slice(0, st.selected.length).concat(cands.slice(st.selected.length).sort((a, b) => b.n - a.n))) {
+    const [px, py] = proj(n);
+    const dim = active && !sel.has(n.id) && !n.baseIdx.some(i => active.has(i));
+    const lz = n.level === lvl ? size : ({ 0: 11, 1: 12 }[n.level] ?? 13);
+    const lines = wrap(n.name, n.level === st.topLevel ? 24 : 22);
+    const w = Math.max(...lines.map(l => l.length)) * lz * 0.56 + 8, h = lines.length * lz * 1.2 + 4;
+    const r = [px - w / 2, py - h / 2, px + w / 2, py + h / 2];
+    if (r[0] < 2 || r[1] < 2 || r[2] > W - 2 || r[3] > H - 2) continue;
+    if (placed.some(q => r[0] < q[2] && r[2] > q[0] && r[1] < q[3] && r[3] > q[1])) continue;
+    placed.push(r);
+    html.push(`<div class="lab l${n.level} ${sel.has(n.id) ? 'sel' : ''} ${dim ? 'dim' : ''}" style="left:${px.toFixed(0)}px;top:${py.toFixed(0)}px">${esc(lines.join('\n'))}</div>`);
+    if (placed.length - nObstacles > 70) break;
+  }
+  box.innerHTML = html.join('');
+}
+
+// ---------------------------------------------------------------- legend
+function renderLegend() {
+  const box = $('#legend'), m = METRIC[st.colorBy];
+  box.onclick = e => { if (e.target.closest('h5')) box.classList.toggle('collapsed'); };
+  if (m.kind === 'cat') {
+    const roots = [...st.roots];  // fixed slot order = size order at load
+    const named = roots.filter(r => st.topColorSlot.get(r.id) >= 0);
+    const others = roots.length - named.length;
+    box.innerHTML = `<h5>Top-level category</h5>` + named.map(r =>
+      `<div class="li" data-sel="${r.id}" title="${esc(r.name)}"><span class="sw" style="background:${rgbCss(topColor(r.id))}"></span><span>${esc(r.name)}</span></div>`).join('') +
+      (others ? `<div class="li" title="The ${others} smallest top-level categories share one neutral colour"><span class="sw" style="background:${OTHER[st.theme]}"></span><span>${others} other categories</span></div>` : '');
+    box.querySelectorAll('[data-sel]').forEach(el => el.onclick = ev => select(el.dataset.sel, { add: ev.shiftKey || ev.metaKey || ev.ctrlKey, zoom: true }));
+    return;
+  }
+  if (!st.domain[m.key]) {
+    box.innerHTML = `<h5>${m.short}</h5><div class="note">No data available for this metric.</div>`;
+    return;
+  }
+  const [lo, hi] = st.domain[m.key];
+  const stops = m.kind === 'div' ? DIV[st.theme] : SEQ[st.theme];
+  const avg = st.overall.stats[m.key];
+  const avgPos = avg == null ? null : Math.max(0, Math.min(1, (avg - lo) / (hi - lo))) * 100;
+  box.innerHTML = `<h5>${m.short} <span style="color:var(--muted);font-weight:400">· per base cluster</span></h5>
+    <div class="grad" style="background:linear-gradient(90deg, ${stops.join(',')})"></div>
+    <div class="ticks">${avgPos != null ? `<span class="avg" style="left:${avgPos}%" title="all conversations: ${m.fmt(avg)}"></span>` : ''}
+      <span>${m.kind === 'div' ? m.fmt(lo) + ' (shrinking)' : (lo === 0 || (m.key === 'concern_mean' && lo === 1) ? '' : '≤ ') + m.fmt(lo)}</span>${m.kind === 'div' ? '<span>0</span>' : ''}<span>${m.kind === 'div' ? m.fmt(hi) + ' (growing)' : '≥ ' + m.fmt(hi)}</span></div>
+    <div class="note">${esc(m.help)}. Tick = all conversations (${avg == null ? '–' : m.fmt(avg)}).</div>`;
+}
+
+boot().catch(e => { console.error(e); document.body.insertAdjacentHTML('beforeend', `<div style="position:fixed;top:60px;left:50%;transform:translateX(-50%);background:#a33;color:#fff;padding:8px 14px;border-radius:8px">Failed to load: ${esc(e.message)}</div>`); });
+</script>
+</body>
+</html>
